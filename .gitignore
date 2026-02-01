@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.env
+
+# Mac
+.DS_Store
+
+# Mauto Specific
+credentials.json
+token.pickle
+emails.db
+.mauto_pids
+backend.log
+frontend.log
+
+# Frontend (redundant safety)
+ui/node_modules/
+ui/dist/

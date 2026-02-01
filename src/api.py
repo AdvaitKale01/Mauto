@@ -1,0 +1,93 @@
+from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+import sqlite3
+import json
+from src.database import DatabaseManager
+from src.ai_engine import AIEngine
+from src.sync import main as run_sync
+
+app = FastAPI(title="Mauto API")
+
+# Allow CORS for React Frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Global AI Engine Instance (Lazy Load)
+ai_engine = None
+
+def get_ai_engine():
+    global ai_engine
+    if ai_engine is None:
+        ai_engine = AIEngine()
+    return ai_engine
+
+class GenerateRequest(BaseModel):
+    email_id: str
+    context: str
+
+@app.get("/api/emails")
+def get_emails(limit: int = 50, offset: int = 0):
+    conn = sqlite3.connect('emails.db')
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    c.execute("SELECT id, subject, sender, date, snippet, thread_id FROM emails ORDER BY date DESC LIMIT ? OFFSET ?", (limit, offset))
+    rows = c.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+@app.get("/api/emails/{email_id}")
+def get_email_detail(email_id: str):
+    conn = sqlite3.connect('emails.db')
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    
+    # Get the specific email
+    c.execute("SELECT * FROM emails WHERE id = ?", (email_id,))
+    row = c.fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Email not found")
+    
+    email = dict(row)
+    
+    # Get the full thread
+    c.execute("SELECT * FROM emails WHERE thread_id = ? ORDER BY date ASC", (email['thread_id'],))
+    thread_rows = c.fetchall()
+    conn.close()
+    
+    return {
+        "email": email,
+        "thread": [dict(r) for r in thread_rows]
+    }
+
+@app.post("/api/sync")
+def trigger_sync(background_tasks: BackgroundTasks):
+    background_tasks.add_task(run_sync)
+    return {"status": "Sync started in background"}
+
+@app.post("/api/generate")
+def generate_draft(req: GenerateRequest):
+    conn = sqlite3.connect('emails.db')
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    c.execute("SELECT * FROM emails WHERE id = ?", (req.email_id,))
+    row = c.fetchone()
+    conn.close()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Email not found")
+
+    engine = get_ai_engine()
+    draft = engine.generate_follow_up(dict(row), context=req.context)
+    
+    return {"draft": draft}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
