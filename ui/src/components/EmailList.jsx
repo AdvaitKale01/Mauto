@@ -26,12 +26,25 @@ export default function EmailList({ emails, selectedIds, onSelect }) {
                         </span>
                     </div>
 
-                    <div className="flex items-center mb-2">
+                    <div className="flex items-center mb-2 overflow-hidden">
                         <div className="w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center text-[10px] font-bold text-slate-500 mr-2 flex-shrink-0">
                             To
                         </div>
                         <p className="text-xs text-slate-600 truncate font-medium">
-                            {email.to || JSON.parse(email.recipients_to || '[]').join(', ')}
+                            {(() => {
+                                try {
+                                    const to = JSON.parse(email.recipients_to || '[]');
+                                    const bcc = JSON.parse(email.recipients_bcc || '[]');
+
+                                    let display = to.join(', ') || 'Me/Undisclosed';
+                                    if (bcc.length > 0) {
+                                        display += ` (+${bcc.length} Bcc)`;
+                                    }
+                                    return display;
+                                } catch (e) {
+                                    return email.recipients_to || '...';
+                                }
+                            })()}
                         </p>
                     </div>
 

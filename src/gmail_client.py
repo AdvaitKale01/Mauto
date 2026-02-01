@@ -178,3 +178,18 @@ class GmailClient:
                         'size': part['body'].get('size', 0)
                     })
         return attachments
+
+    def get_attachment_data(self, msg_id, attachment_id):
+        """Fetches the raw attachment data given message ID and attachment ID."""
+        if not self.service:
+            # Auto-authenticate if needed (assuming single user context)
+            self.authenticate()
+            
+        attachment = self.service.users().messages().attachments().get(
+            userId='me', messageId=msg_id, id=attachment_id
+        ).execute()
+        
+        data = attachment.get('data')
+        if data:
+            return base64.urlsafe_b64decode(data)
+        return None

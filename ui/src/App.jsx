@@ -25,6 +25,12 @@ function App() {
     }
   }
 
+  // Resize State
+  const [navWidth, setNavWidth] = useState(250)
+  const [listWidth, setListWidth] = useState(380)
+  const [resizingNav, setResizingNav] = useState(false)
+  const [resizingList, setResizingList] = useState(false)
+
   const triggerSync = async () => {
     setSyncing(true)
     try {
@@ -37,14 +43,56 @@ function App() {
     }
   }
 
+  // Global Resize Handler
+  useEffect(() => {
+    const handleMouseMove = (e) => {
+      if (resizingNav) {
+        const newWidth = e.clientX
+        if (newWidth > 150 && newWidth < 400) setNavWidth(newWidth)
+      }
+      if (resizingList) {
+        // List width is effectively mouse X minus nav width
+        const newWidth = e.clientX - navWidth
+        if (newWidth > 250 && newWidth < 600) setListWidth(newWidth)
+      }
+    }
+    const handleMouseUp = () => {
+      setResizingNav(false)
+      setResizingList(false)
+    }
+
+    if (resizingNav || resizingList) {
+      document.addEventListener('mousemove', handleMouseMove)
+      document.addEventListener('mouseup', handleMouseUp)
+      document.body.style.cursor = 'col-resize'
+    } else {
+      document.body.style.cursor = 'default'
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+      document.body.style.cursor = 'default'
+    }
+  }, [resizingNav, resizingList, navWidth])
+
   useEffect(() => {
     fetchEmails()
   }, [])
 
   return (
-    <div className="flex h-screen w-full bg-material-bg text-material-text overflow-hidden">
-      {/* Sidebar */}
-      <div className="w-64 bg-material-surface border-r border-material-border flex flex-col">
+    <div className="flex h-screen w-full bg-material-bg text-material-text overflow-hidden select-none">
+      {/* Sidebar (Nav) */}
+      <div
+        className="bg-material-surface border-r border-material-border flex flex-col relative shrink-0"
+        style={{ width: navWidth }}
+      >
+        {/* Resize Handle A */}
+        <div
+          className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-400 transition-colors z-20"
+          onMouseDown={() => setResizingNav(true)}
+        />
+
         <div className="h-16 flex items-center px-6 border-b border-material-border">
           <div className="flex items-center space-x-2 font-bold text-xl text-material-primary">
             <Zap size={24} fill="currentColor" />
@@ -79,7 +127,16 @@ function App() {
       {/* Main Content Area */}
       <div className="flex flex-1 overflow-hidden">
         {/* Email List Column */}
-        <div className="w-96 border-r border-material-border bg-material-surface flex flex-col">
+        <div
+          className="border-r border-material-border bg-material-surface flex flex-col relative shrink-0"
+          style={{ width: listWidth }}
+        >
+          {/* Resize Handle B */}
+          <div
+            className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-400 transition-colors z-20"
+            onMouseDown={() => setResizingList(true)}
+          />
+
           <div className="h-16 flex items-center justify-between px-6 border-b border-material-border">
             <h2 className="font-semibold text-lg">Inbox</h2>
             <span className="text-xs font-medium bg-slate-100 px-2 py-1 rounded-full text-material-muted">

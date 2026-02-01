@@ -36,13 +36,19 @@ def get_emails(limit: int = 50, offset: int = 0):
     conn = sqlite3.connect('emails.db')
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
-    c.execute("SELECT id, subject, sender, date, snippet, thread_id FROM emails ORDER BY date DESC LIMIT ? OFFSET ?", (limit, offset))
+    c.execute("SELECT id, subject, sender, date, snippet, thread_id, recipients_to, recipients_cc, recipients_bcc FROM emails ORDER BY date DESC LIMIT ? OFFSET ?", (limit, offset))
     rows = c.fetchall()
     conn.close()
     return [dict(row) for row in rows]
 
+from fastapi import Response
+from src.gmail_client import GmailClient
+
+# ...
+
 @app.get("/api/emails/{email_id}")
 def get_email_detail(email_id: str):
+    # ... (existing code)
     conn = sqlite3.connect('emails.db')
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
@@ -65,6 +71,21 @@ def get_email_detail(email_id: str):
         "email": email,
         "thread": [dict(r) for r in thread_rows]
     }
+
+@app.get("/api/attachments/{message_id}/{attachment_id}")
+def get_attachment(message_id: str, attachment_id: str):
+    client = GmailClient()
+    try:
+        data = client.get_attachment_data(message_id, attachment_id)
+        if not data:
+            raise HTTPException(status_code=404, detail="Attachment not found")
+        
+        # Determine mime type ?? For now generic or trust browser
+        # Ideally we pass it in query param or lookup in DB, but simple blob return works for images
+        return Response(content=data)
+    except Exception as e:
+        print(f"Error fetching attachment: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/sync")
 def trigger_sync(background_tasks: BackgroundTasks):
