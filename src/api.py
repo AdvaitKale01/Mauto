@@ -18,7 +18,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Global AI Engine Instance (Lazy Load)
+# Global Managers
+db_manager = DatabaseManager()
 ai_engine = None
 
 def get_ai_engine():
@@ -27,16 +28,36 @@ def get_ai_engine():
         ai_engine = AIEngine()
     return ai_engine
 
+def sync_task():
+    # Helper to run sync in background with shared engine
+    engine = get_ai_engine()
+    run_sync(ai=engine, db=db_manager)
+
 class GenerateRequest(BaseModel):
     email_id: str
     context: str
 
+class FilterRequest(BaseModel):
+    prompt: str
+
 @app.get("/api/emails")
-def get_emails(limit: int = 50, offset: int = 0):
+def get_emails(limit: int = 50, offset: int = 0, is_job: bool = True):
     conn = sqlite3.connect('emails.db')
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
-    c.execute("SELECT id, subject, sender, date, snippet, thread_id, recipients_to, recipients_cc, recipients_bcc FROM emails ORDER BY date DESC LIMIT ? OFFSET ?", (limit, offset))
+    
+    # Ensure table exists (safeguard)
+    c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='emails'")
+    if not c.fetchone():
+        conn.close()
+        return []
+    
+    # Filter by job relatedness if requested
+    query = "SELECT id, subject, sender, date, snippet, thread_id, recipients_to, recipients_cc, recipients_bcc FROM emails"
+    query += " WHERE is_job_related = ?"
+    query += " ORDER BY date DESC LIMIT ? OFFSET ?"
+    
+    c.execute(query, (1 if is_job else 0, limit, offset))
     rows = c.fetchall()
     conn.close()
     return [dict(row) for row in rows]
@@ -89,7 +110,7 @@ def get_attachment(message_id: str, attachment_id: str):
 
 @app.post("/api/sync")
 def trigger_sync(background_tasks: BackgroundTasks):
-    background_tasks.add_task(run_sync)
+    background_tasks.add_task(sync_task)
     return {"status": "Sync started in background"}
 
 @app.post("/api/generate")
@@ -108,6 +129,20 @@ def generate_draft(req: GenerateRequest):
     draft = engine.generate_follow_up(dict(row), context=req.context)
     
     return {"draft": draft}
+
+@app.post("/api/filter")
+def filter_emails(req: FilterRequest):
+    conn = sqlite3.connect('emails.db')
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    # Get all emails for context (simplified, might want to limit to current view)
+    c.execute("SELECT id, subject, sender, date FROM emails ORDER BY date DESC LIMIT 100")
+    emails = [dict(r) for r in c.fetchall()]
+    conn.close()
+    
+    engine = get_ai_engine()
+    matching_ids = engine.filter_emails(emails, req.prompt)
+    return {"matching_ids": matching_ids}
 
 if __name__ == "__main__":
     import uvicorn

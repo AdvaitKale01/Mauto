@@ -28,6 +28,7 @@ class DatabaseManager:
                 body_html TEXT,
                 attachments TEXT,
                 snippet TEXT,
+                is_job_related BOOLEAN DEFAULT 0,
                 last_synced TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
@@ -58,8 +59,8 @@ class DatabaseManager:
                     id, thread_id, date, sender, 
                     recipients_to, recipients_cc, recipients_bcc, 
                     subject, body_text, body_html, 
-                    attachments, snippet
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    attachments, snippet, is_job_related
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 email_data.get('id'),
                 email_data.get('threadId'),
@@ -72,7 +73,8 @@ class DatabaseManager:
                 email_data.get('body_text', ''),
                 email_data.get('body_html', ''),
                 to_json(email_data.get('attachments', [])),
-                email_data.get('snippet', '')
+                email_data.get('snippet', ''),
+                email_data.get('is_job_related', 0)
             ))
             conn.commit()
             return True
